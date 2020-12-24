@@ -1,0 +1,587 @@
+---
+title: "Práctica 2"
+author: "Marco Emilio Rodríguez Serrano && Luis García Tarraga"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_libraries, include=FALSE}
+if(!require(knitr)){
+  install.packages('knitr', repos='http://cran.us.r-project.org')
+  library(knitr)
+}
+
+if(!require(ggplot2)){
+  install.packages('ggplot2', repos='http://cran.us.r-project.org')
+  library(ggplot2)
+}
+
+if(!require(gridExtra)){
+  install.packages('gridExtra', repos='http://cran.us.r-project.org')
+  library(gridExtra)
+}
+
+if(!require(gmodels)){
+  install.packages('gmodels', repos='http://cran.us.r-project.org')
+  library(gmodels)
+}
+
+if(!require(corrplot)){
+  install.packages('corrplot', repos='http://cran.us.r-project.org')
+  library(corrplot)
+}
+
+if(!require(rpart)){
+    install.packages('rpart', repos='http://cran.us.r-project.org')
+    library(rpart)
+}
+
+if(!require(rpart.plot)){
+    install.packages('rpart.plot', repos='http://cran.us.r-project.org')
+    library(rpart.plot)
+}
+if(!require(dplyr)){
+    install.packages('dplyr')
+    library(dplyr)
+}
+
+```
+
+******
+# 0 Carga de los datos
+******
+
+Cargamos los datos con la cabecera
+
+Visualizamos las 5 primeras filas para comprobar de forma visual que no hay problemas aparentes
+
+
+```{r echo=TRUE}
+#Cargamos el conjunto de datos
+data <- read.csv('train.csv',stringsAsFactors = TRUE, header = TRUE, strip.white = T, sep = ",")
+
+summary(data)
+head(data, 5)
+```
+
+
+******
+# 1 Descripción del dataset.
+******
+
+Descripción del dataset. ¿Por qué es importante y qué pregunta/problema pretende responder?
+
+El dataset se compone de los siguientes campos:
+
+* PassengerId: Identificador del pasajero
+* Survived: Indica si el pasajero sobrevivió. Si vale 0 entonces no sobrevivión, si vale 1 entonces es un superviviente
+* Pclass: Indica la clase en la que viajaba el pasajero (1 = 1st, 2 = 2nd, 3 = 3rd)
+* Name: Nombre y apellidos del pasajero
+* Sex: Sexo del pasajero
+* Age: Edad en años	
+* SibSp: Número de hermanos / esposas a bordo del Titanic
+* Parch: Número de padres / hijos a bordo del Titanic	
+* Ticket: Número de ticket
+* Fare: Precio que ha pagado el pasajero por el viaje
+* Cabin: Número de la cabina del pasajero	
+* Embarked: Puerto de embarque (C = Cherbourg, Q = Queenstown, S = Southampton)
+
+Este dataset es muy relevante porque se refiere a los pasajeros del Titanic, indicando además si el pasajero consiguió sobrevivir o no al naufragio.
+
+A través de este dataset se puede analizar distintos aspectos sobre quiénes sobrevivieron, por ejemplo si las mujeres y los niños se salvaron en relación a los hombres, si el hecho de viajar en una clase u otra podría implicar un mayor o menor ratio de supervivencia.
+
+Este dataset es además un clásico a nivel de formación y ejemplos de estadística y minería de datos. Este ejemplo en concreto lo hemos obtenido de: https://www.kaggle.com/c/titanic
+
+
+******
+# 2 Integración y selección de los datos de interés a analizar.
+******
+
+Desde la vista de resumen de nuestros datos podemos ver que tenemos diversos puntos a revisar, primero tenemos la variable **Name** que tiene una varianza tal que cada registro contiene un valor único, por lo cual esta variable no tiene uso práctico tal cual, sin transformar, por lo que la vamos a eliminar del conjunto de datos. Ocurre lo mismo con PassengerId, no necesitamos este campo ya que contiene un número de pasajero pero no aporta información para el análisis.
+
+
+```{r echo=TRUE}
+data$Name <- NULL
+
+data$PassengerId <- NULL
+
+summary(data)
+```
+
+
+******
+# 3 Limpieza de los datos.
+******
+
+Podemos ver que las variable **Survived** es una variable categórica, pero ha cargado como variable numérica, lo mismo sucede con la variable **Pclass**, vamos a transformarlas:
+
+```{r echo=TRUE}
+data$Survived <- factor(data$Survived, levels = c(0,1), labels = c("NO", "YES"))
+
+data$Pclass <- factor(data$Pclass, levels = c(1,2,3), labels = c("1st", "2nd", "3rd"))
+
+# Revisamos la estructura
+str(data)
+```
+
+A continuación, vamos a recodificar como NA los valores faltantes en la variable **Cabin** y **Embarked**. Estos datos los trataremos más adelante.
+
+```{r echo=TRUE}
+data$Cabin[data$Cabin == ""] <- NA
+data$Embarked[data$Embarked == ""] <- NA
+
+summary(data)
+```
+
+A continuación, vamos a recodificar los datos de la cabina para generar una nueva variable conteniendo las plantas en las que residían los pasajeros, que es un dato que, por su menor varianza y mayor relación, aparente, con la variable respuesta puede ser más interesante:
+
+```{r echo=TRUE}
+n <- nrow(data)
+aux <- 0
+planta <- c()
+for(i in 1:n){
+  if(is.na(data$Cabin[i])){planta[i] <- NA}
+  else{
+  aux <- substr(data$Cabin[i],start = 2, stop = 2)
+  if(aux == " ") {planta[i] <- substr(data$Cabin[i], start = 1, stop = 3)}
+  else{planta[i] <- substr(data$Cabin[i], start = 1, stop = 1)}
+  }
+}
+
+data$planta <- planta <- as.factor(factor(planta, levels = c("A", "B", "C", "D", "E", "F", "F E", "F G", "G", "T"), labels = c("A", "B", "C", "D", "E", "F", "F E", "F G", "G", "T")))
+
+summary(data)
+```
+
+Finalmente, vamos a dividir a los pasajeros en 3 grupos según su planta, planta alta, media y baja.
+
+```{r echo=TRUE}
+data$catplant <- factor(factor(data$planta, levels = c("A", "B", "C", "D", "E", "F","F E", "F G", "G", "T"), labels = c("alta", "alta", "alta", "alta", "media", "baja", "baja", "baja", "baja", "baja")))
+data$catplant <- relevel(data$catplant, ref = "baja")
+
+summary(data)
+head(data, 5)
+```
+
+## 3.1. ¿Los datos contienen ceros o elementos vacíos? ¿Cómo gestionarías cada uno de estos casos?
+
+Ahora que tenemos todas las variables cargadas correctamente, podemos observar que tenemos valores faltantes en las variables **Age**, **Cabin** y **Embarked**, en la variable **Embarked** solo tenemos 2 valores faltantes, por lo tanto, vamos a eliminarlos, ya que representan una fracción muy pequeña del total de información de la muestra. En la variable **Age** tenemos un total de 117 valores faltantes, les imputaremos el valor de la media.
+
+```{r echo=TRUE}
+data <- data[!is.na(data$Embarked),]
+data$Age[is.na(data$Age)] <- mean(data$Age[!is.na(data$Age)])
+summary(data)
+```
+
+En cambio, la variable **Cabin**, que es, de las que podemos presuponer, más interesantes para el estudio, posee un total de 687 registros en los que su valor es NA, pero tenemos la variable **Pclass** y podemos pensar que la mayoría de habitaciones de una misma clase se encontrarían en una misma **planta**, vamos a intentar ver gráficamente si esta asunción es correcta.
+
+```{r echo=TRUE}
+
+nrow(data[data$Pclass == "1st" & data$catplant == "alta",])
+nrow(data[data$Pclass == "1st" & data$catplant == "media",])
+nrow(data[data$Pclass == "1st" & data$catplant == "baja",])
+
+nrow(data[data$Pclass == "2nd" & data$catplant == "alta",])
+nrow(data[data$Pclass == "2nd" & data$catplant == "media",])
+nrow(data[data$Pclass == "2nd" & data$catplant == "baja",])
+
+nrow(data[data$Pclass == "3rd" & data$catplant == "alta",])
+nrow(data[data$Pclass == "3rd" & data$catplant == "media",])
+nrow(data[data$Pclass == "3rd" & data$catplant == "baja",])
+
+qplot(Pclass, catplant, color = Pclass, data = data)
+```
+
+Podemos ver, mediante el conteo y el gráfico, que había pasajeros de todos los niveles en todas las alturas del barco, además, vemos que mientras que los pasajeros de primera si se situaban en su mayoría en las plantas más elevadas, los pasajeros de segunda y tercera, estaban repartidos entre todos los niveles, como no encontramos otra posible relación natural entre las otras variables y la variable **Cabin** vamos a generar una tabla de correlaciones a ver si observamos algún tipo de dependencia:
+
+```{r echo=TRUE}
+## Funcion para la matriz de correlacion
+cor2 = function(df){
+  
+  stopifnot(inherits(df, "data.frame"))
+  stopifnot(sapply(df, class) %in% c("integer"
+                                     , "numeric"
+                                     , "factor"
+                                     , "character"))
+  
+  cor_fun <- function(pos_1, pos_2){
+    
+    # both are numeric
+    if(class(df[[pos_1]]) %in% c("integer", "numeric") &&
+       class(df[[pos_2]]) %in% c("integer", "numeric")){
+      r <- stats::cor(df[[pos_1]]
+                      , df[[pos_2]]
+                      , use = "pairwise.complete.obs"
+      )
+    }
+    
+    # one is numeric and other is a factor/character
+    if(class(df[[pos_1]]) %in% c("integer", "numeric") &&
+       class(df[[pos_2]]) %in% c("factor", "character")){
+      r <- sqrt(
+        summary(
+          stats::lm(df[[pos_1]] ~ as.factor(df[[pos_2]])))[["r.squared"]])
+    }
+    
+    if(class(df[[pos_2]]) %in% c("integer", "numeric") &&
+       class(df[[pos_1]]) %in% c("factor", "character")){
+      r <- sqrt(
+        summary(
+          stats::lm(df[[pos_2]] ~ as.factor(df[[pos_1]])))[["r.squared"]])
+    }
+    
+    # both are factor/character
+    if(class(df[[pos_1]]) %in% c("factor", "character") &&
+       class(df[[pos_2]]) %in% c("factor", "character")){
+      r <- lsr::cramersV(df[[pos_1]], df[[pos_2]], simulate.p.value = TRUE)
+    }
+    
+    return(r)
+  } 
+  
+  cor_fun <- Vectorize(cor_fun)
+  
+  # now compute corr matrix
+  corrmat <- outer(1:ncol(df)
+                   , 1:ncol(df)
+                   , function(x, y) cor_fun(x, y)
+  )
+  
+  rownames(corrmat) <- colnames(df)
+  colnames(corrmat) <- colnames(df)
+  
+  return(corrmat)
+}
+
+#Generamos matriz de correlación
+cor_matrix = cor2(data)
+cor_matrix
+```
+
+Después de ver qué **Cabin** tiene una alta correlación con muchas de las otras variables, debemos plantearnos que los valores faltantes no se deban a un error, si no que sea un valor valido que represente a los tripulantes que viajaban sin una habitación asignada, después de investigar hemos constatado que el Titanic contaba con un total de 365 habitaciones, por lo que, es normal que no todos los pasajeros tuvieran una asignada, siendo, por tanto, NA un valor válido de esta variable.
+
+## 3.2. Identificación y tratamiento de valores extremos.
+A continuación, mediante diagramas de cajas, vamos a buscar valores extremos en nuestras variables numéricas. Empezaremos por la variable **Age**:
+
+```{r echo=TRUE}
+length(data$Age)
+boxplot(data$Age,main="Age", col="gray")
+extremos_Age <- boxplot.stats(data$Age)$out
+extremos_Age
+length(extremos_Age)
+```
+
+Podemos observar que detectamos 8 valores como valores extremos, pero como representan una parte muy pequeña del total de la muestra, con bajo riesgo para sesgar nuestros análisis y se encuentran dentro del dominio, no vamos a tratar estos registros. A continuación, vamos a observar la variable **SibSp**:
+
+```{r echo=TRUE}
+length(data$SibSp)
+boxplot(data$SibSp,main="SibSp", col="gray")
+extremos_SibSp <- boxplot.stats(data$SibSp)$out
+extremos_SibSp
+length(extremos_SibSp)
+```
+
+En este caso tenemos un valor más significativo de valores extremos 46 de un total de 889 registros, pero de nuevo se encuentran dentro de lo que podríamos considerar un dominio aceptable, por lo que no vamos a considerarlos outliers. Finalmente vamos a revisar la variable **Parch**:
+
+```{r echo=TRUE}
+length(data$Parch)
+boxplot(data$Parch,main="Parch", col="gray")
+extremos_Parch <- boxplot.stats(data$Parch)$out
+extremos_Parch
+length(extremos_Parch)
+```
+
+De nuevo, volvemos a tener más valores extremos, pero siguen dentro del rango de la variable y no suponen un riesgo real de sesgar nuestra muestra, los tendremos especialmente en cuenta, pero no vamos a considerarlos outliers.
+
+******
+# 4.Análisis de los datos.
+******
+
+## 4.1.Selección de los grupos de datos que se quieren analizar/comparar (planificación de los análisis a aplicar).
+Vamos a analizar los datos utilizando las variables **Pclass**, **catplant**, **Sex** y **Age**
+
+A priori, nos parecen variables representativas del dataset cara a hacer distintos análisis.
+
+De forma informal siempre que hay un naufragio se dice que las mujeres y los niños primero. Nos gustaría ver si realmente fue así en el Titanic, por lo que realizaremos un análisis al respecto.
+
+También queremos ver si la edad puede influir en el hecho de haber sobrevivido o no, nos gustaría analizar si se salvaron más jóvenes en media que personas mayores.
+
+Haremos distintos análisis focalizándonos especialmente en sexo y edad mediante hipótesis y regresiones, además incluiremos un arbol de decisión con estas variables ver qué tipos de reglas podemos extraer.
+
+Por último, incluimos una correlación para ver cómo se relacionan las variables entre sí.
+
+
+## 4.2.Comprobación de la normalidad y homogeneidad de la varianza.
+
+A continuación, vamos a comprobar el supuesto de normalidad, para un nivel de confianza del 95% sobre la variable **Age**, ya que es la única de las variables mencionadas anteriormente que es continua, mediante el test de Shaphiro-Wilk:
+
+```{r echo=TRUE}
+shapiro.test(data$Age)
+```
+
+Podemos ver que el p-valor devuelto por el test es 7.897e-08, por tanto, tomaremos como válida la hipótesis alternativa del test, considerando que la variable no sigue una distribución normal. Podemos observarlo gráficamente:
+
+```{r echo=TRUE}
+
+rows = nrow(data)
+bw <- 2 * IQR(data$Age) / length(data$Age)^(1/3)
+Age_g <- ggplot(data = data[1:rows,], aes(Age))
+Age_g <- Age_g + geom_histogram(col="royalblue4", fill="royalblue1", binwidth = bw)
+grid.arrange(Age_g, nrow = 1, ncol = 1, top = " ")
+```
+
+Podemos concluir, por tanto, que realmente la variable **Age** no sigue una distribución normal. En cuanto al test de homocedasticidad, vamos a realizarlo para nuestras 3 variables categóricas, vamos a hacer uso del test de Fligner-Killeen dado que es el más robusto para variables que se alejan de una distribución normal:
+
+```{r echo=TRUE}
+fligner.test(as.numeric(Survived) ~ Pclass, data = data)
+fligner.test(as.numeric(Survived) ~ catplant, data = data)
+fligner.test(as.numeric(Survived) ~ Sex, data = data)
+```
+
+Vemos que hay una varianza homogénea solo en la variable **catplant**, lo que debería indicar que la probabilidad de sobrevivir no se veía afectada por la planta en la que tenía su habitación el pasajero, lo cual se ve reforzado por la correlación de esta variable con la variable **Survived**, que es de solo 0.10031552, en cambio vemos que las otras dos variables si presentan mayor varianza, lo que de nuevo indica una más fuerte relación con la probabilidad de supervivencia del pasajero, como nos indica su correlación, de 0.33702932 para la variable **Pclass** y de 0.54158492 para la variable **Sex**.
+
+```{r echo=TRUE}
+rows = dim(data)[1]
+
+Pclass_g <- ggplot(data = data[1:rows,], aes(x=Pclass, fill=Survived))
+Pclass_g <- Pclass_g + geom_bar()
+
+catplant_g <- ggplot(data = data[1:rows,], aes(x=catplant, fill=Survived))
+catplant_g <- catplant_g + geom_bar()
+
+Sex_g <- ggplot(data = data[1:rows,], aes(x=Sex, fill=Survived))
+Sex_g <- Sex_g + geom_bar()
+
+grid.arrange(Pclass_g, catplant_g, Sex_g, nrow = 2, ncol = 2, top = "Distribución de las variables categoricas")
+```
+
+## 4.3.Aplicación de pruebas estadísticas para comparar los grupos de datos.
+
+### 4.3.1 Hipotesis edad supervivientes
+
+Una pregunta que nos podemos hacer después de haber revisado las edades de los pasajeros, es si los supervivientes del Titanic eran más jóvenes que quienes no sobrevivieron, con un rango de confianza del 95%.
+
+De este modo, podemos lanzar la siguiente hipótesis nula y su alternativa:
+- H0: La media de edad de los supervivientes del Titanic = que media de edad de los que no sobrevivieron
+- H1: La media de edad de los supervivientes del Titanic < que media de edad de los que no sobrevivieron
+
+$$H_0:\mu_1=\mu_2$$
+$$H_0:\mu_1<\mu_2$$
+
+Ejecutamos un t-tes para hacer el contrate de hipótesis
+
+
+```{r echo=TRUE}
+
+t.test(Age ~ Survived, data)
+
+```
+
+Vemos que p-value es menor que 0.05, por lo que podemos rechazar la hipótesis nula a favor de la hipótesis alternativa, por lo que podemos decir que la media de edad de los que sobrevivieron era menor.
+
+De hecho, la media en el grupo de supervivientes es de 28 años y en el grupo de no supervivientes es de 30 años.
+
+
+### 4.3.2 Hipotesis sexo supervivientes
+
+Podemos hacer lo mismo a nivel de género de los supervivientes.
+
+Utilizamos la función crosstable para ver las proporciones de supervivientes y muertos según género.
+
+```{r echo=TRUE}
+
+
+CrossTable(data$Survived,data$Sex)
+
+```
+
+De la tabla anterior, podemos decir que el 67.9% de los supervivientes eran mujeres y que el 74% de las mujeres que estaban a bordo sobrevivieron.
+
+Podemos pensar que hay una relación entre género y supervivencia, por lo que podemos formular la siguiente hipótesis.
+
+H0 - No hay relación entre ambas variables
+H1 - Hay una relación entre ambas variables
+
+Para lanzar esta hipótesis, podemos utilizar el test Chi-cuadrado ya que hay datos categóricos.
+
+
+```{r echo=TRUE}
+a <- xtabs(~Survived+Sex, data)
+chisq.test(a)
+```
+
+Como podemos ver, que el p-value es mucho menor que 0.05, por lo que podemos rechazar la hipótesis nula. Por tanto ambas variables de género y superviviencia están relacionadas.
+
+
+
+### 4.3.2 Regresión con edad
+
+Podemos analizar si la variable Survived que indica si el pasajero sobrevivió es una variable dependiente de la edad.
+
+Podemos utilizar una regresión logística simple para analizar este punto.
+
+
+```{r echo=TRUE}
+
+model <- glm(Survived ~ Age, data, family = binomial)
+summary(model)
+```
+
+A partir de los resultados (p=0.0268), podemos decir que existe una relación lineal entre ambas variables pero es baja.
+
+A partir de esta regresión podríamos lanzar una pregunta del tipo, qué probabilidad tendria de sobrevivir en caso de que tuviera 10 años, 25 años y 74 años.
+
+```{r echo=TRUE}
+
+pred<-predict(model, data.frame(Age=10),type = "response")
+pred
+```
+
+La probabilidad de sobrevivir con una edad de 10 años es de un 43.88%
+
+```{r echo=TRUE}
+
+pred<-predict(model, data.frame(Age=25),type = "response")
+pred
+```
+
+La probabilidad de sobrevivir con una edad de 25 años sería de un 39.5%.
+
+
+```{r echo=TRUE}
+
+pred<-predict(model, data.frame(Age=74),type = "response")
+pred
+```
+
+La probabilidad de sobrevivir con una edad de 74 años sería de un 26.6%.
+
+### 4.3.3 Correlación
+
+También podemos revisar la correlación entre las distintas variables, podemos utilizar la función corrplot utilizando la función de generación de matrices de correlación que utilizamos al principio de este análisis. Lo aplicaremos sobre el grupo de variables que hemos seleccionado para esta sección.
+
+
+```{r message= FALSE, warning=FALSE}
+data_selected <- select(data, Survived, Pclass, Sex, Age, catplant)
+cor_matrix_selected = cor2(data_selected)
+
+# Grafico la matriz de correlación
+corrplot(cor_matrix_selected)
+cor_matrix_selected
+```
+
+Nos interesa especialmente la correlación que puede haber entre la variable Survived y el resto. 
+
+Vemos que la variable Sex es la que tiene más correlación con Survived (0.54158492).
+
+### 4.3.4 Árbol de decisión
+
+Vamos a utilizar un árbol de decisión para poder hacer predicción en base a estos datos (**Pclass**, **catplant**, **Sex** y **Age**)
+
+Nuestro objetivo es crear un árbol de decisión que permita analizar qué tipo de pasajero del Titanic tenía probabilidades de sobrevivir o no. Por lo tanto, la variable por la que clasificaremos es el campo de si el pasajero sobrevivió o no. 
+
+En primer lugar nos vamos a quedar únicamente con los campos objeto del estudio y la clase que debemos predecir (Survived)
+```{r}
+# Revisamos la estructura
+str(data_selected)
+head(data_selected)
+```
+
+Vamos a desordenar un poco las filas para tener más aletoriedad al crear el dataset de entrenamiento y el dataset de evaluación. El nuevo dataset desordenado lo ponemos en "data_random".
+
+```{r}
+set.seed(1)
+data_random <- data_selected[sample(nrow(data_selected)),]
+```
+
+
+Creamos el conjunto de entrenamiento y el de evaluación, 2/3 de filas para el conjunto de entrenamiento y 1/3 para el conjunto de prueba. 
+
+
+```{r}
+set.seed(666)
+y <- data_random[,1]
+X <- data_random[,2:4]
+
+indexes = sample(1:nrow(data_selected), size=floor((2/3)*nrow(data_selected)))
+trainX<-X[indexes,]
+trainy<-y[indexes]
+testX<-X[-indexes,]
+testy<-y[-indexes]
+```
+
+
+Se crea el árbol de decisión usando los datos de entrenamiento:
+
+```{r}
+#model <- C50::C5.0(trainX, trainy,rules=TRUE )
+#summary(model)
+
+model_tree <- rpart(formula = trainy ~ ., data = cbind(trainX, trainy),
+                            control = rpart.control(cp = 0, maxdepth = 4))
+model_tree
+```
+
+Del árbol podemos llegar a las siguientes conclusiones:
+- Si es un hombre y tiene una edad >= 6.5 años, entonces muere con una probabilidad de un 80,81%
+- Si es un hombre y tiene una edad < 6.5 años, entonces sobrevive con una probabilidad del 81,25%
+- Si es mujer
+    - no viaja en tercera clase, entonces sobrevive con una probabilidad del 93,86%
+    - viaja en tercera clase
+        - su edad es mayor o igual que 38,5 años, entonces muere (100%)
+        - su edad es menor de 21,5 años, entonces no sobrevive al 58,82%
+        - sue edad es menor de 38,5 años pero igual o mayor a 21,5 años, entonces sobrevive al 62%
+
+Por tanto podemos concluir que el conocimiento extraído y cruzado con el análisis visual se resume en "las mujeres y los niños primero a excepción de que fueras de 3ª clase". Si eras de 3ª clase tenías más posibilidades si eras mujer con una edad comprendida entre 21,5 y 38,5 años.
+
+
+A continuación mostramos el árbol obtenido.
+
+```{r}
+rpart.plot(model_tree)
+```
+
+Una vez tenemos el modelo, podemos comprobar su calidad prediciendo la clase para los datos de prueba que nos hemos reservado al principio. 
+
+```{r}
+predicted_model <- predict( model_tree, testX, type="class" )
+print(sprintf("La precisión del árbol es: %.4f %%",100*sum(predicted_model == testy) / length(predicted_model)))
+```
+
+
+Tenemos a nuestra disposición el paquete gmodels para obtener información más completa:
+
+```{r}
+CrossTable(testy, predicted_model,prop.chisq  = FALSE, prop.c = FALSE, prop.r =FALSE,dnn = c('Reality', 'Prediction'))
+```
+
+******
+# 5.Conclusiones
+******
+
+A modo de resumen, hemos visto a lo largo del análisis los siguientes puntos:
+
+* Hay variables como Name y PassengerId que no aportan información a priori al análiis y que hemos decidido eliminar
+* En el caso del tratamiento de valores vacíos, en algunos casos hemos podido eliminar directamente las observaciones al ser pocos casos (embarked), en otros hemos podido aplicar la media (age) y otros casos se referían a pasajeros que no viajaban en cabina.
+* No hemos encontrado outliers fuera de lo normal, estaban dentro del dominio
+* Hemos visto que catplant, la categoría por planta, no afectaba en cuanto a nivel de supervivencia
+* Hemos demostrado mediante contraste de hipótesis que de media los supervivientes son más jóvenes que quienes acabaron muriendo
+* Hemos visto también que hay una relación entre sexo y supervivencia por contraste de hipótesis
+* A través de una regresión lineal hemos visto cierta dependencia entre edad y supervivencia aunque era una dependencia débil
+* Mediante un árbol de decisión, hemos comprobado que se cumple la hipótesis inicial de que había más probabilidad de salvarse si se era mujer o niño y que viajar en tercera clase suponía una mayor probabilidad de morir que en el resto de clases
+* Con las correlaciones hemos visto que la variable que más se correlaciona con Survived es la variable sex
+
+
+
+
+
+
+
