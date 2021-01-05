@@ -1,3 +1,5 @@
+![Titanic](https://album.mediaset.es/eimg/10000/2020/08/25/clipping_cEUE3y_77fe.jpg)
+
 # Notebook de análisis del Titanic
 
 Se trata de un notebook en R para llevar a cabo un análisis del Titanic para la asignatura Tipología y ciclo de vida de los datos.
