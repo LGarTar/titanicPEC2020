@@ -3,14 +3,17 @@ title: "Práctica 2"
 author: "Marco Emilio Rodríguez Serrano && Luis García Tarraga"
 date: '`r format(Sys.Date(),"%e de %B, %Y")`'
 output:
-  pdf_document:
-    toc: yes
   html_document:
+    toc: yes
+  pdf_document:
     toc: yes
 ---
 
 ```{r load_libraries, include=FALSE}
-tinytex::install_tinytex()
+if(!require(pagedown)){
+  remotes::install_github('rstudio/pagedown')
+  pagedown::html_paged
+}
 
 if(!require(knitr)){
   install.packages('knitr', repos='http://cran.us.r-project.org')
@@ -61,16 +64,27 @@ if(!require(missForest)){
     install.packages('missForest', repos='http://cran.us.r-project.org')
     library(missForest)
 }
+
+if(!require(htmlTable)){
+    install.packages('htmlTable', repos='http://cran.us.r-project.org')
+    library(htmlTable)
+}
+
+if(!require(magrittr)){
+    install.packages('magrittr', repos='http://cran.us.r-project.org')
+    library(magrittr)
+}
 ```
 
 ```{r, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=TRUE)
 ```
 
 \pagebreak
 
 ******
-# 0 Carga de los datos
+# 0.Carga de los datos
 ******
 
 Cargamos los datos con la cabecera
@@ -89,7 +103,7 @@ head(data, 5)
 \pagebreak
 
 ******
-# 1 Descripción del dataset.
+# 1.Descripción del dataset.
 ******
 
 Descripción del dataset. ¿Por qué es importante y qué pregunta/problema pretende responder?
@@ -118,7 +132,7 @@ Este dataset es además un clásico a nivel de formación y ejemplos de estadís
 \pagebreak
 
 ******
-# 2 Integración y selección de los datos de interés a analizar.
+# 2.Integración y selección de los datos de interés a analizar.
 ******
 
 Desde la vista de resumen de nuestros datos podemos ver que tenemos diversos puntos a revisar, primero tenemos la variable **Name** que tiene una varianza tal que cada registro contiene un valor único, por lo cual esta variable no tiene uso práctico tal cual, sin transformar, por lo que la vamos a eliminar del conjunto de datos. Ocurre lo mismo con **PassengerId**, no necesitamos este campo ya que contiene un número de pasajero pero no aporta información para el análisis.
@@ -135,7 +149,7 @@ summary(data)
 \pagebreak
 
 ******
-# 3 Limpieza de los datos.
+# 3.Limpieza de los datos.
 ******
 
 Podemos ver que las variable **Survived** es una variable categórica, pero ha cargado como variable numérica, lo mismo sucede con la variable **Pclass**, vamos a transformarlas:
@@ -724,7 +738,21 @@ A modo de resumen, hemos visto a lo largo del análisis los siguientes puntos:
 * Con las correlaciones hemos visto que el precio del ticket tiene un nivel de relación muy bajo con respecto a la edad.
 * Podemos ver por tanto, que la conocida cita de "Mujeres y niños primero", se cumplía en general, seguida de un fuerte sesgo por clases económicas.
 
-\begin{table}[]
+\pagebreak
+
+******
+# 7.Contribuciones
+******
+
+```{r message= FALSE, warning=FALSE, tidy=FALSE, echo=FALSE}
+matrix(c('Investigación previa', 'Redacción de las respuestas', 'Desarrollo código', 'Marco Emilio Rodríguez Serrano, Luis García Tarraga', 'Marco Emilio Rodríguez Serrano, Luis García Tarraga', 'Marco Emilio Rodríguez Serrano, Luis García Tarraga'),
+       ncol = 2,
+       dimnames = list(c("", "", ""),
+                       c("Contribuciones", "Firma"))) %>% 
+  htmlTable
+```
+
+\begin{table}[ht]
 \begin{tabular}{ll}
 Contribuciones              & Firma                                                   \\
 Investigación previa        & Marco Emilio Rodríguez Serrano \&\& Luis García Tarraga \\
