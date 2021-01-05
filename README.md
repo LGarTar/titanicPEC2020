@@ -4,6 +4,7 @@ Se trata de un notebook en R para llevar a cabo un análisis del Titanic para la
 
 ## Nota sobre el uso
 **El código está escrito en R.**
+**El documento resultante principal es el generado en html, con una estética más cuidada y moderna, adjuntamos también el documento en PDF, con menor tratado estético para maximizar la compatibilidad.**
 
 ## Descripción Dataset Titanic
 El dataset se compone de los siguientes campos:
